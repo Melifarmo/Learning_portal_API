@@ -42,6 +42,10 @@ class Lesson(models.Model):
     def lesson_title(self):
         return self.title
 
+    @property
+    def test_len(self):
+        return len(PresetAnswer.objects.filter(question__lesson=self.id))
+
     def __str__(self):
         if self.order:
             order = self.order
@@ -71,6 +75,22 @@ class Question(models.Model):
     def question_type(self):
         return self.type.title
 
+    @property
+    def is_multi_type_answer(self):
+        return self.question_type == 'single' or self.question_type == 'multi'
+
+    @property
+    def all_options(self):
+        if self.is_multi_type_answer:
+            return PresetChoosableOption.objects.filter(question=self.id)
+        return []
+
+    @property
+    def right_options(self):
+        if self.is_multi_type_answer:
+            return self.all_options.filter(correct_answer=True)
+        return []
+
     def __str__(self):
         return f"{self.lesson.lesson_title}: {self.title}"
 
@@ -93,13 +113,21 @@ class QuestionType(models.Model):
 
 
 class PresetAnswer(models.Model):
-    question = models.OneToOneField(Question, on_delete=models.CASCADE, related_name='preset_answers')
+    question = models.OneToOneField(Question, on_delete=models.CASCADE, related_name='preset_answer')
     text = models.TextField(blank=True, null=True)
     boolean = models.BooleanField(blank=True, null=True)
     options = models.ManyToManyField('PresetChoosableOption', blank=True)
     mapped_answers = models.ManyToManyField('PresetMappedOption', blank=True)
 
     objects = models.Manager()
+
+    @property
+    def lesson(self):
+        return self.question.lesson
+
+    @property
+    def question_type(self):
+        return self.question.question_type
 
     def __str__(self):
         return f"{self.question}: {self.question.question_type}"
@@ -115,6 +143,10 @@ class PresetChoosableOption(models.Model):
     correct_answer = models.BooleanField()
 
     objects = models.Manager()
+
+    @property
+    def lesson(self):
+        return self.question.lesson
 
     @property
     def question_related_name(self):
@@ -135,6 +167,10 @@ class PresetMappedOption(models.Model):
                               related_name='preset_mapped_answers', default=None)
 
     objects = models.Manager()
+
+    @property
+    def lesson(self):
+        return self.question.lesson
 
     @property
     def group_title(self):
@@ -186,14 +222,17 @@ class CoursePersonalProgress(models.Model):
         lessons_progress = LessonPersonalProgress.objects.filter(course_progress=self.id)
         for lesson in lessons_progress:
             if not lesson.completed:
-                return lesson.id
+                return lesson
+        return None
 
     @property
     def next_lesson(self):
         if self.last_lesson != self.current_lesson:
-            next_lessons = self.course.all_lessons.filter(order__gt=1)
+            next_lessons = self.course.all_lessons.filter(order__gt=self.current_lesson.order)
             next_lesson = next_lessons.order_by('order').first()
             return next_lesson
+        else:
+            return None
 
     def __str__(self):
         return f"{self.user.username}: {self.course} (пройден: {self.completed})"
@@ -214,6 +253,8 @@ class LessonPersonalProgress(models.Model):
 
     objects = models.Manager()
 
+    answers = set()
+
     @property
     def order(self):
         return self.lesson.order
@@ -221,6 +262,22 @@ class LessonPersonalProgress(models.Model):
     @property
     def course(self):
         return self.course_progress.course
+
+    @property
+    def user(self):
+        return self.course_progress.user
+
+    @property
+    def course_last_lesson(self):
+        return self.course.last_lesson
+
+    @property
+    def next_lesson(self):
+        return self.course_progress.next_lesson
+
+    @property
+    def is_last_block(self):
+        return self.course_last_lesson == self.lesson
 
     def __str__(self):
         return f"{self.course_progress.course.title}: {self.lesson.lesson_title} ({self.completed})"
@@ -240,21 +297,22 @@ class Answer(models.Model):
     single_answer = models.ForeignKey(PresetChoosableOption, on_delete=models.CASCADE,
                                       related_name='user_single_answers',
                                       blank=True, null=True)
-    multi_answers = models.ManyToManyField(PresetChoosableOption, blank=True, related_name='user_multi_answers')
+    multi_answers = models.ManyToManyField(PresetChoosableOption, blank=True, related_name='user_answers')
     mapped_answers = models.ManyToManyField('MappedAnswer', blank=True, related_name='user_answers')
 
     objects = models.Manager()
 
     @property
-    def type_of_question(self):
+    def question_type(self):
         return self.question.question_type
 
     def __str__(self):
         text_templates = {'text': self.text,
                           'multi': ' '.join([answer.title for answer in self.multi_answers.all()]),
                           'boolean': self.boolean,
-                          'single': self.single_answer}
-        return f"{self.user.username}: {text_templates[self.type_of_question]} / ({self.question.question_title})"
+                          'single': self.single_answer,
+                          'mapped': self.mapped_answers}
+        return f"{self.user.username}: {text_templates[self.question_type]} / ({self.question.question_title})"
 
     class Meta:
         verbose_name = '4. Ответ пользователя'
@@ -263,9 +321,15 @@ class Answer(models.Model):
 
 
 class MappedAnswer(models.Model):
-    value = models.CharField(max_length=64)
-    group = models.ForeignKey(PresetMappedOptionGroup, on_delete=models.CASCADE, related_name='mapped_answers',
-                              default=None)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, default=None)
+    value = models.ForeignKey(PresetMappedOption, on_delete=models.CASCADE, default=None,
+                              related_name='user_mapped_answers')
+    group = models.ForeignKey(PresetMappedOptionGroup, on_delete=models.CASCADE, default=None,
+                              related_name='user_mapped_answers')
+
+    @property
+    def title(self):
+        return self.value.title
 
     def __str__(self):
         return f"{self.value} ({self.group})"
