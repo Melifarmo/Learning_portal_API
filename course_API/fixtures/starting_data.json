@@ -1,0 +1,274 @@
+[
+  {
+    "model": "course_API.Course",
+    "pk": "1",
+    "fields": {
+      "title": "Введение в Python"
+    }
+  },
+  {
+    "model": "course_API.Course",
+    "pk": "2",
+    "fields": {
+      "title": "Переменные"
+    }
+  },
+
+  {
+    "model": "course_API.Lesson",
+    "pk": "1",
+    "fields": {
+      "title": "Введение",
+      "course": 1,
+      "content": "Текст лекции, введение в питон",
+      "order": 1
+    }
+  },
+  {
+    "model": "course_API.Lesson",
+    "pk": "2",
+    "fields": {
+      "title": "Плюсы минусы Python",
+      "course": 1,
+      "content": "Текст лекции, плюсы и минусы Python",
+      "order": 2
+    }
+  },
+
+  {
+    "model": "course_API.QuestionType",
+    "pk": "1",
+    "fields": {
+      "title": "text"
+    }
+  },
+  {
+    "model": "course_API.QuestionType",
+    "pk": "2",
+    "fields": {
+      "title": "boolean"
+    }
+  },
+  {
+    "model": "course_API.QuestionType",
+    "pk": "3",
+    "fields": {
+      "title": "single"
+    }
+  },
+  {
+    "model": "course_API.QuestionType",
+    "pk": "4",
+    "fields": {
+      "title": "multi"
+    }
+  },
+  {
+    "model": "course_API.QuestionType",
+    "pk": "5",
+    "fields": {
+      "title": "mapped"
+    }
+  },
+
+  {
+    "model": "course_API.Question",
+    "pk": "1",
+    "fields": {
+      "title": "На каком языке базируется Python",
+      "lesson": 1,
+      "type": 1,
+      "order": 1
+    }
+  },
+  {
+    "model": "course_API.Question",
+    "pk": "2",
+    "fields": {
+      "title": "Python это язык программирования",
+      "lesson": 1,
+      "type": 2,
+      "order": 2
+    }
+  },
+  {
+    "model": "course_API.Question",
+    "pk": "3",
+    "fields": {
+      "title": "Python интерпретируемый или компелируемый язык программирования",
+      "lesson": 1,
+      "type": 3,
+      "order": 3
+    }
+  },
+  {
+    "model": "course_API.Question",
+    "pk": "4",
+    "fields": {
+      "title": "Выберете типы данных присутствующие в Python",
+      "lesson": 1,
+      "type": 4,
+      "order": 4
+    }
+  },
+  {
+    "model": "course_API.Question",
+    "pk": "5",
+    "fields": {
+      "title": "Распределите правильные и неправильные утверждения",
+      "lesson": 1,
+      "type": 5,
+      "order": 5
+    }
+  },
+
+  {
+    "model": "course_API.PresetAnswer",
+    "pk": "1",
+    "fields": {
+      "question": 1,
+      "text": "Си"
+    }
+  },
+  {
+    "model": "course_API.PresetAnswer",
+    "pk": "2",
+    "fields": {
+      "question": 2,
+      "boolean": true
+    }
+  },
+  {
+    "model": "course_API.PresetAnswer",
+    "pk": "3",
+    "fields": {
+      "question": 3,
+      "options": [1, 2]
+    }
+  },
+  {
+    "model": "course_API.PresetAnswer",
+    "pk": "4",
+    "fields": {
+      "question": 4,
+      "options": [3, 4, 5 ,6]
+    }
+  },
+  {
+    "model": "course_API.PresetAnswer",
+    "pk": "5",
+    "fields": {
+      "question": 5,
+      "mapped_answers": [1, 2, 3, 4]
+    }
+  },
+
+  {
+    "model": "course_API.PresetChoosableOption",
+    "pk": "1",
+    "fields": {
+      "title": "Интерпретируемый",
+      "question": 3,
+      "correct_answer": true
+    }
+  },
+  {
+    "model": "course_API.PresetChoosableOption",
+    "pk": "2",
+    "fields": {
+      "title": "Компелируемый",
+      "question": 3,
+      "correct_answer": false
+    }
+  },
+  {
+    "model": "course_API.PresetChoosableOption",
+    "pk": "3",
+    "fields": {
+      "title": "jpg",
+      "question": 4,
+      "correct_answer": false
+    }
+  },
+  {
+    "model": "course_API.PresetChoosableOption",
+    "pk": "4",
+    "fields": {
+      "title": "int",
+      "question": 4,
+      "correct_answer": true
+    }
+  },
+  {
+    "model": "course_API.PresetChoosableOption",
+    "pk": "5",
+    "fields": {
+      "title": "mobi",
+      "question": 4,
+      "correct_answer": false
+    }
+  },
+  {
+    "model": "course_API.PresetChoosableOption",
+    "pk": "6",
+    "fields": {
+      "title": "str",
+      "question": 4,
+      "correct_answer": true
+    }
+  },
+
+  {
+    "model": "course_API.PresetMappedOption",
+    "pk": "1",
+    "fields": {
+      "title": "Программисты пишут код, а не переустанавливают Windows",
+      "question": 5,
+      "group": 1
+    }
+  },
+  {
+    "model": "course_API.PresetMappedOption",
+    "pk": "2",
+    "fields": {
+      "title": "Python это хороший первый язык программирования",
+      "question": 5,
+      "group": 1
+    }
+  },
+  {
+    "model": "course_API.PresetMappedOption",
+    "pk": "3",
+    "fields": {
+      "title": "Все программисты умеют чинить принтер",
+      "question": 5,
+      "group": 2
+    }
+  },
+  {
+    "model": "course_API.PresetMappedOption",
+    "pk": "4",
+    "fields": {
+      "title": "Лучше бы программисты работали за станками на заводах",
+      "question": 5,
+      "group": 2
+    }
+  },
+
+  {
+    "model": "course_API.PresetMappedOptionGroup",
+    "pk": "1",
+    "fields": {
+      "title": "Правильные",
+      "question": 5
+    }
+  },
+    {
+    "model": "course_API.PresetMappedOptionGroup",
+    "pk": "2",
+    "fields": {
+      "title": "Неправильные",
+      "question": 5
+    }
+  }
+]
