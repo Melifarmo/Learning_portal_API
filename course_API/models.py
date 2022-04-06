@@ -253,7 +253,9 @@ class LessonPersonalProgress(models.Model):
 
     objects = models.Manager()
 
-    answers = set()
+    @property
+    def answers(self):
+        return Answer.objects.filter(lesson_progress=self.id)
 
     @property
     def order(self):
@@ -326,6 +328,8 @@ class MappedAnswer(models.Model):
                               related_name='user_mapped_answers')
     group = models.ForeignKey(PresetMappedOptionGroup, on_delete=models.CASCADE, default=None,
                               related_name='user_mapped_answers')
+
+    objects = models.Manager()
 
     @property
     def title(self):

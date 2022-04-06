@@ -1,25 +1,21 @@
-import json
-
-from functools import wraps
 from django.contrib.auth import authenticate
 from .serializers import CourseSerializer
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework.views import APIView
 from rest_framework.generics import CreateAPIView
 from rest_framework.viewsets import ModelViewSet, ViewSet
 from rest_framework.authtoken.models import Token
 from rest_framework.status import HTTP_200_OK
 from django.views.decorators.csrf import csrf_exempt
-from django.http import HttpRequest
-from .serializers import UserSerializer, AnswerSerializer
-from . import models
 
 from django.dispatch import receiver
 from django.db.models.signals import post_save, pre_save
 
+from course_API.serializers import UserSerializer
 from course_API import models
+
+import json
 
 
 # Logic
@@ -30,7 +26,7 @@ def lesson_progress_auto_creater(sender, instance, **kwargs):
     else:
         progress = instance
         previous_progress = models.LessonPersonalProgress.objects.get(id=progress.id)
-        is_last_block = progress.lesson.id == progress.course_last_lesson.id
+        is_last_block = instance.is_last_block
         course = progress.course
 
         if previous_progress.completed != progress.completed:
@@ -49,19 +45,10 @@ def lesson_progress_auto_creater(sender, instance, **kwargs):
 
 
 @receiver(post_save, sender=models.CoursePersonalProgress)
-def create_first_lesson_stage(sender, instance, created, **kwargs):
+def create_first_lesson_with_course_start(sender, instance, created, **kwargs):
     if created:
-        first_block = instance.first_lesson
-        models.LessonPersonalProgress.objects.create(course_progress=instance, lesson=first_block)
-
-
-@receiver(post_save, sender=models.Answer)
-def add_user_answer_in_lesson_progress(sender, instance, created, **kwargs):
-    user = instance.user
-    lesson = instance.question.lesson
-    progress = get_lesson_progress(lesson, user)
-    progress.answers.add(instance)
-    progress.save()
+        models.LessonPersonalProgress.objects.create(course_progress=instance,
+                                                     lesson=instance.first_lesson)
 
 
 @csrf_exempt
@@ -91,130 +78,120 @@ class CourseAPIViewSet(ModelViewSet):
     serializer_class = CourseSerializer
 
 
-@api_view(['GET'])
-def get_course_scheme(request, pk=None):
-    course_id = request.GET.get('id')
-    course = get_object_or_none(models.Course, pk=course_id)
-    if course:
-        course_data = CourseSerializer(course)
-        course_progress = get_model_or_none_from_related_set(course.course_progress.all())
-        if course_progress:
-            completed_status = course_progress.completed
-        else:
-            completed_status = False
-        return Response({'completed': completed_status, 'course': course_data.data})
-    return Response({'error': 'Данного курса не существует'})
-
-
-@api_view(['POST'])
-def start_course(request):
-    user = get_user_instance(request)
-    course_id = request.GET.get('id')
-    course = get_object_or_none(models.Course, pk=course_id)
-    if course:
-        course_progress, created = models.CoursePersonalProgress.objects.get_or_create(user=user, course=course)
-        if created:
-            return Response({'course': f"'{course.title}' - начат!"})
-        return Response({'error': f"'{course.title}' уже начат"})
-    return Response({'error': 'Курса с таким id не существует'})
-
-
-@api_view(['GET'])
-def get_lesson(request):
-    user = get_user_instance(request)
-    lesson_id = request.GET.get('id')
-    lesson = get_object_or_none(models.Lesson, pk=lesson_id)
-    if lesson:
-        if is_lesson_available_for_user(lesson, user):
-            return Response({'lesson_content': lesson.content})
-    return Response(
-        {'error': 'На данный момент вы не имеете доступ к данному учебному материалу или материал не существует'})
-
-
-@api_view(['GET'])
-def get_test(request):
-    lesson_id = request.GET.get('id')
-    lesson = get_object_or_none(models.Lesson, pk=lesson_id)
-    user = get_user_instance(request)
-    data = []
-
-    if lesson:
-        progress = get_lesson_progress(lesson, user)
-        if progress and is_test_available(progress):
-            questions = get_model_or_none_from_related_set(lesson.questions).filter()
-            if questions:
-                for question in questions:
-                    answer = get_answers(question)
-                    data.append(get_test_data(question, answer))
-
-                return Response(data)
+class CourseViewSet(ViewSet):
+    def get_course_scheme(self, request):
+        course_id = request.GET.get('id')
+        course = get_object_or_none(models.Course, pk=course_id)
+        if course:
+            course_data = CourseSerializer(course)
+            course_progress = get_model_or_none_from_related_set(course.course_progress.all())
+            if course_progress:
+                completed_status = course_progress.completed
             else:
-                error = 'Лекция пока что не имеет тестовой части'
-        else:
-            error = 'Тест недоступен'
-    else:
-        error = 'Лекции не существует'
-    return Response({'error': error})
+                completed_status = False
+            return Response({'completed': completed_status, 'course': course_data.data})
+        return Response({'error': 'Данного курса не существует'})
+
+    def start_course(self, request):
+        user = get_user_instance(request)
+        course_id = request.GET.get('id')
+        course = get_object_or_none(models.Course, pk=course_id)
+        if course:
+            course_progress, created = models.CoursePersonalProgress.objects.get_or_create(user=user, course=course)
+            if created:
+                return Response({'course': f"'{course.title}' - начат!"})
+            return Response({'error': f"'{course.title}' уже начат"})
+        return Response({'error': 'Курса с таким id не существует'})
 
 
-@api_view(['POST'])
-def complete_lesson(request):
-    user = get_user_instance(request)
-    lesson_id = request.GET.get('id')
-    lesson = get_object_or_none(models.Lesson, pk=lesson_id)
-    block_progress = get_lesson_progress(lesson, user)
-
-    if lesson:
-        if block_progress:
+class LessonViewSet(ViewSet):
+    def get_lesson(self, request):
+        user = get_user_instance(request)
+        lesson_id = request.GET.get('id')
+        lesson = get_object_or_none(models.Lesson, pk=lesson_id)
+        if lesson:
             if is_lesson_available_for_user(lesson, user):
-                complete_lesson_text_part(block_progress)
-                return Response({'message': f'Этап "{lesson.title}" успешно завершен'})
-        error = 'Лекция пройдена или недоступна'
-    elif block_progress:
-        if block_progress.completed:
-            error = 'Данный этап уже завершен'
+                return Response({'lesson_content': lesson.content})
+        return Response(
+            {'error': 'На данный момент вы не имеете доступ к данному учебному материалу или материал не существует'})
+
+    def complete_lesson(self, request):
+        user = get_user_instance(request)
+        lesson_id = request.GET.get('id')
+        lesson = get_object_or_none(models.Lesson, pk=lesson_id)
+        block_progress = get_lesson_progress(lesson, user)
+
+        if lesson:
+            if block_progress:
+                if is_lesson_available_for_user(lesson, user):
+                    complete_lesson_text_part(block_progress)
+                    return Response({'message': f'Этап "{lesson.title}" успешно завершен'})
+            error = 'Лекция пройдена или недоступна'
+        elif block_progress:
+            if block_progress.completed:
+                error = 'Данный этап уже завершен'
+            else:
+                error = 'В данный момент вы не можете завершить эту лекцию'
         else:
-            error = 'В данный момент вы не можете завершить эту лекцию'
-    else:
-        error = 'Данной лекции не существует'
-    return Response({'error': error})
+            error = 'Данной лекции не существует'
+        return Response({'error': error})
 
 
-@api_view(['POST'])
-def save_test_stage(request):
-    success, message = save_answers_from_json(request)
-    if success:
-        return Response({"message": message})
-    return Response({"error": message})
+class TestViewSet(ViewSet):
+    def get_test(self, request):
+        lesson_id = request.GET.get('id')
+        lesson = get_object_or_none(models.Lesson, pk=lesson_id)
+        user = get_user_instance(request)
+        data = []
 
+        if lesson:
+            progress = get_lesson_progress(lesson, user)
+            if progress and is_test_available(progress):
+                questions = get_model_or_none_from_related_set(lesson.questions).filter()
+                if questions:
+                    for question in questions:
+                        answer = get_answers(question)
+                        data.append(get_test_data(question, answer))
 
-@api_view(['POST'])
-def complete_test(request):
-    success, _ = save_answers_from_json(request)
-    user = get_user_instance(request)
-    show(_)
-    raw_data = request.POST.get('answers')
-    data = json.loads(raw_data)
+                    return Response(data)
+                else:
+                    error = 'Лекция пока что не имеет тестовой части'
+            else:
+                error = 'Тест недоступен'
+        else:
+            error = 'Лекции не существует'
 
-    lesson = models.Lesson.objects.get(pk=data['lesson'])
-    progress = get_lesson_progress(lesson, user)
-    answers = progress.answers
+        return Response({'error': error})
 
-    if lesson.test_len == len(answers):
+    def save_test_stage(self, request):
+        success, message = save_answers_from_json(request)
+        if success:
+            return Response({"message": message})
+        return Response({"error": message})
 
-        for answer in answers:
-            if not check_answer(answer):
-                return Response({"test_result": "К сожалению, вы не прошли тест"})
-        complete_lesson_block(progress)
-        return Response({"test_result": "Поздравляю! Тест успешно пройдет, "
-                                        "вы можете перейти к следующему этапу, "
-                                        "если он доступен"})
-    else:
-        error = 'Завершите тест до конца, у вас недостаточно ответов'
+    def complete_test(self, request):
+        success, _ = save_answers_from_json(request)
+        user = get_user_instance(request)
+        raw_data = request.POST.get('answers')
+        data = json.loads(raw_data)
 
-    return Response({'id', 'kek'})
+        lesson = models.Lesson.objects.get(pk=data['lesson'])
+        progress = get_lesson_progress(lesson, user)
+        answers = progress.answers
 
+        if lesson.test_len == len(answers):
 
+            for answer in answers:
+                if not check_answer(answer):
+                    return Response({"test_result": "К сожалению, вы не прошли тест"})
+            complete_lesson_block(progress)
+            return Response({"test_result": "Поздравляю! Тест успешно пройдет, "
+                                            "вы можете перейти к следующему этапу, "
+                                            "если он доступен"})
+        else:
+            error = 'Завершите тест до конца, у вас недостаточно ответов'
+
+        return Response({'error', error})
 
 
 def check_answer(current_answer):
@@ -232,6 +209,7 @@ def check_answer(current_answer):
         result = check_multi_answer(current_answer, correct_answer)
     else:
         result = check_mapped_answer(current_answer, correct_answer)
+
     return result
 
 
@@ -269,8 +247,6 @@ def check_single_answer(current_answer, correct_answer):
 def save_answers_from_json(request):
     user = get_user_instance(request)
     raw_data = request.POST.get('answers')
-    progress = models.LessonPersonalProgress.objects.get(course_progress__user=user.id, lesson=1)
-    error = None
 
     if raw_data:
         try:
@@ -281,14 +257,13 @@ def save_answers_from_json(request):
             answers = data['answers']
             lesson_id = data['lesson']
             lesson = get_object_or_none(models.Lesson, pk=lesson_id)
-
+            progress = lesson.lesson_progress.get(course_progress__user=user.id)
             if lesson:
-                progress = lesson.lesson_progress.get(course_progress__user=user.id)
                 if is_test_available(progress):
                     for answer in answers:
                         save_answer(answer, user)
-                    return True, 'Промежуточный результат теста сохранен'
 
+                    return True, 'Промежуточный результат теста сохранен'
                 else:
                     error = 'Сдача данного теста недоступна'
             else:
@@ -333,7 +308,6 @@ def save_answer(answer_data, user):
     """
     question = get_object_or_none(models.Question, pk=answer_data['question'])
     answers = answer_data['answer']
-    show('xczczxczxczxc')
     if question:
         question_type = question.question_type
         answer_model = get_answer_model(question, user)
@@ -346,15 +320,7 @@ def save_answer(answer_data, user):
             update_option_answer(answer_model, answers)
         else:
             update_mapped_answer(answer_model, answers)
-        update_question_answers(answer_model)
-
-
-def update_question_answers(answer_model):
-    user = answer_model.user
-    lesson = answer_model.question.lesson
-    progress = get_lesson_progress(lesson, user)
-    progress.answers.add(answer_model)
-    progress.save()
+        answer_model.save()
 
 
 def update_mapped_answer(answer_model, answers):
@@ -362,7 +328,6 @@ def update_mapped_answer(answer_model, answers):
     answer_model.mapped_answers.clear()
     for answer in mapped_answers:
         answer_model.mapped_answers.add(answer)
-    answer_model.save()
 
 
 def get_mapped_answers_list(answer_model, answers):
@@ -382,14 +347,13 @@ def get_mapped_answer_model(answer, question, user):
 
 def update_option_answer(answer_model, answers):
     question_type = answer_model.question.question_type
-    option_models = []
 
     if question_type == 'single':
-        answers = [answers]
-    for option_id in answers:
-        option_models.append(get_option_model(option_id))
-    update_answer(answer_model, option_models, question_type)
-
+        answer_model.single_answer = get_option_model(answers)
+    else:
+        for option_id in answers:
+            answer_model.multi_answers.add(get_option_model(option_id))
+    return answer_model
 
 def get_option_model(option_id):
     return models.PresetChoosableOption.objects.get(pk=option_id)
@@ -399,18 +363,6 @@ def get_answer_model(question, user):
     progress = get_lesson_progress(question.lesson, user)
     answer_model, _ = models.Answer.objects.get_or_create(question=question, user=user, lesson_progress=progress)
     return answer_model
-
-
-def update_answer(answer_model, options, question_type):
-    if question_type == 'single':
-        answer_model.single_answer = options[0]
-    elif question_type == 'multi':
-        answer_model.multi_answers.clear()
-        for option in options:
-            answer_model.multi_answers.add(option)
-    answer_model.save()
-    answer_model.lesson_progress.answers.add(answer_model)
-
 
 
 # Support function
@@ -434,36 +386,42 @@ def is_m2m_type(question_type):
     return False
 
 
-def parsing_mapped_answers(answers, groups, options):
+def parsing_mapped_answers(answers):
     unique_group = {}
+    options = []
+    groups = []
+
     for option in answers:
         option_id = option['id']
-        title = option['title']
         group_id = option['group_id']
 
-        group_title = models.PresetMappedOptionGroup.objects.get(pk=option_id).title
+        mapped_option = models.PresetMappedOption.objects.get(pk=option_id)
+        group_title = models.PresetMappedOptionGroup.objects.get(pk=group_id).title
+
         unique_group[group_title] = group_id
-        options.append({'id': option_id, 'title': title})
+        options.append({'id': mapped_option.id, 'title': mapped_option.title})
 
     for value, pk in unique_group.items():
         groups.append({'id': pk, 'title': value})
+    return options, groups
 
 
-def parsing_choosable_answers(answers, options):
+def parsing_choosable_answers(answers):
+    options = []
     for option in answers:
         options.append({'id': option.id, 'value': option.title})
+    return options
 
 
 def get_test_data(question, answers):
     question_type = question.question_type
-    options = []
     groups = []
     data = {'id': question.id, 'question': question.title}
     if is_m2m_type(question_type):
         if question_type == 'mapped':
-            parsing_mapped_answers(answers, groups, options)
+            options, groups = parsing_mapped_answers(answers)
         else:
-            parsing_choosable_answers(answers, options)
+            options = parsing_choosable_answers(answers)
         options_data = {'values': options}
         if groups:
             options_data['groups'] = groups
@@ -570,9 +528,8 @@ def complete_lesson_block(progress):
 def create_next_progress_block(current_lesson_progress):
     course_progress = current_lesson_progress.course_progress
     next_block_id = course_progress.next_lesson
-    show(course_progress, 'asd')
 
-    _ = models.LessonPersonalProgress.objects.get_or_create(course_progress=course_progress, lesson=next_block_id)
+    models.LessonPersonalProgress.objects.create(course_progress=course_progress, lesson=next_block_id)
 
 
 def delete_next_progress_block(current_lesson_progress):

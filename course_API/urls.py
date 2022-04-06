@@ -5,13 +5,13 @@ urlpatterns = [
     path('create-user/', views.CreateUser.as_view()),
     path('login/', views.user_login),
 
-    path('get-course-scheme/', views.get_course_scheme),
-    path('start-course/', views.start_course),
+    path('course/', views.CourseViewSet.as_view({"get": "get_course_scheme",
+                                                 "post": "start_course"})),
 
-    path('get-lesson-content/', views.get_lesson),
-    path('complete-lesson-part/', views.complete_lesson),
+    path('lesson/', views.LessonViewSet.as_view({"get": "get_lesson",
+                                                 "post": "complete_lesson"})),
 
-    path('get-test/', views.get_test),
-    path('save-test/', views.save_test_stage),
-    path('complete-test/', views.complete_test),
+    path('test/', views.TestViewSet.as_view({"get": "get_test",
+                                             "post": "complete_test"})),
+    path('save-test/', views.TestViewSet.as_view({"post": "save_test_stage"})),
 ]
