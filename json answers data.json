@@ -1,0 +1,25 @@
+{
+    "lesson": 1,
+    "answers": [
+        {
+            "question": 1,
+            "answer": "Си"
+        },
+        {
+            "question": 2,
+            "answer": true
+        },
+        {
+            "question": 3,
+            "answer": 1
+        },
+        {
+            "question": 4,
+            "answer": [4, 6]
+        },
+        {
+            "question": 5,
+            "answer": [{"value": 1, "group": 1}, {"value": 2, "group": 1}, {"value": 3, "group": 2}, {"value": 4, "group": 2}]
+        }
+    ]
+}

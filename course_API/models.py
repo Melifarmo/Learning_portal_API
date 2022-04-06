@@ -259,12 +259,12 @@ class CoursePersonalProgress(models.Model):
 
     @property
     def next_lesson(self):
-        if self.last_lesson.id != self.current_lesson.id:
-            next_lessons = self.course.all_lessons.filter(order__gt=self.current_lesson.order)
-            next_lesson = next_lessons.order_by('order').first()
-            return next_lesson
-        else:
-            return None
+        if self.last_lesson and self.current_lesson:
+            if self.last_lesson.id != self.current_lesson.id:
+                next_lessons = self.course.all_lessons.filter(order__gt=self.current_lesson.order)
+                next_lesson = next_lessons.order_by('order').first()
+                return next_lesson
+        return None
 
     def __str__(self):
         return f"{self.user.username}: {self.course} (пройден: {self.completed})"
@@ -276,7 +276,8 @@ class CoursePersonalProgress(models.Model):
 
 
 class LessonPersonalProgress(models.Model):
-    course_progress = models.ForeignKey(CoursePersonalProgress, on_delete=models.CASCADE, related_name='lesson_progress')
+    course_progress = models.ForeignKey(CoursePersonalProgress, on_delete=models.CASCADE,
+                                        related_name='lesson_progress')
     lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name='lesson_progress')
     completed = models.BooleanField(default=False)
     lesson_part_completed = models.BooleanField(help_text='Лекция изучена?', default=False,
@@ -326,15 +327,21 @@ class Answer(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     question = models.OneToOneField(Question, on_delete=models.CASCADE, related_name='user_answers')
     lesson_progress = models.ForeignKey(LessonPersonalProgress, on_delete=models.CASCADE, related_name='user_answers')
-    text = models.TextField(blank=True, null=True)
-    boolean = models.BooleanField(blank=True, null=True)
+    text = models.TextField(blank=True, null=True, default=None)
+    boolean = models.BooleanField(blank=True, null=True, default=None)
     single_answer = models.ForeignKey(PresetChoosableOption, on_delete=models.CASCADE,
                                       related_name='user_single_answers',
-                                      blank=True, null=True)
-    multi_answers = models.ManyToManyField(PresetChoosableOption, blank=True, related_name='user_answers')
-    mapped_answers = models.ManyToManyField('MappedAnswer', blank=True, related_name='user_answers')
+                                      blank=True, null=True, default=None)
+    multi_answers = models.ManyToManyField(PresetChoosableOption, blank=True, default=None,
+                                           related_name='user_answers')
+    mapped_answers = models.ManyToManyField('MappedAnswer', blank=True, default=None,
+                                            related_name='user_answers')
 
     objects = CourseAPIManager()
+
+    @property
+    def is_multi_answer(self):
+        return self.question_type in ['single', 'multi', 'mapped']
 
     @property
     def question_type(self):
@@ -345,13 +352,13 @@ class Answer(models.Model):
                           'multi': ' '.join([answer.title for answer in self.multi_answers.all()]),
                           'boolean': self.boolean,
                           'single': self.single_answer,
-                          'mapped': self.mapped_answers}
+                          'mapped': self.mapped_answers.all()}
         return f"{self.user.username}: {text_templates[self.question_type]} / ({self.question.question_title})"
 
     class Meta:
         verbose_name = '4. Ответ пользователя'
         verbose_name_plural = '4. Ответы пользователей'
-        unique_together = [['question', 'user']]
+        unique_together = (('user', 'question'),)
 
 
 class MappedAnswer(models.Model):
