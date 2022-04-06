@@ -5,8 +5,8 @@ urlpatterns = [
     path('create-user/', views.CreateUser.as_view()),
     path('login/', views.user_login),
 
-    path('course/', views.CourseViewSet.as_view({"get": "get_course_scheme",
-                                                 "post": "start_course"})),
+    path('course/', views.CourseGenericSet.as_view({"get": "get_course_scheme",
+                                                    "post": "start_course"})),
 
     path('lesson/', views.LessonViewSet.as_view({"get": "get_lesson",
                                                  "post": "complete_lesson"})),

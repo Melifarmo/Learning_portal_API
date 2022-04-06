@@ -1,5 +1,15 @@
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ObjectDoesNotExist
+
+
+class CourseAPIManager(models.Manager):
+    def get_model_or_none(self, model, **kwargs):
+        try:
+            instance = model.objects.get(**kwargs)
+        except ObjectDoesNotExist:
+            instance = None
+        return instance
 
 
 User = get_user_model()
@@ -8,7 +18,7 @@ User = get_user_model()
 class Course(models.Model):
     title = models.CharField(max_length=255, verbose_name='Название курса')
 
-    objects = models.Manager()
+    objects = CourseAPIManager()
 
     @property
     def first_lesson(self):
@@ -21,6 +31,11 @@ class Course(models.Model):
     @property
     def all_lessons(self):
         return Lesson.objects.filter(course=self.id)
+
+    def get_course_progress(self, user):
+        return CoursePersonalProgress.objects.get_model_or_none(
+            CoursePersonalProgress, course=self.id,
+            user=user.id)
 
     def __str__(self):
         return self.title
@@ -36,15 +51,29 @@ class Lesson(models.Model):
     order = models.IntegerField(verbose_name='Порядковый номер лекции')
     content = models.TextField(help_text='Текст лекции', verbose_name='Лекция')
 
-    objects = models.Manager()
+    objects = CourseAPIManager()
 
     @property
-    def lesson_title(self):
-        return self.title
+    def all_users_progress(self):
+        return LessonPersonalProgress.objects.filter(lesson=self.id)
 
     @property
     def test_len(self):
         return len(PresetAnswer.objects.filter(question__lesson=self.id))
+
+    def get_personal_progress(self, user):
+        return LessonPersonalProgress.objects.get_model_or_none(
+            LessonPersonalProgress,
+            lesson=self.id,
+            course_progress__user=user.id)
+
+    def is_lesson_available_for_user(self, user):
+        progress = self.get_personal_progress(user)
+        course_progress = progress.course_progress
+        if progress:
+            return course_progress.current_lesson.id == self.id and \
+                not course_progress.completed and not progress.completed
+        return False
 
     def __str__(self):
         if self.order:
@@ -65,7 +94,7 @@ class Question(models.Model):
     type = models.ForeignKey('QuestionType', on_delete=models.SET_DEFAULT, default=None, null=True)
     order = models.IntegerField(blank=True, null=True)
 
-    objects = models.Manager()
+    objects = CourseAPIManager()
 
     @property
     def question_title(self):
@@ -92,7 +121,7 @@ class Question(models.Model):
         return []
 
     def __str__(self):
-        return f"{self.lesson.lesson_title}: {self.title}"
+        return f"{self.lesson.title}: {self.title}"
 
     class Meta:
         verbose_name = '1.3 Вопрос к блоку'
@@ -102,7 +131,7 @@ class Question(models.Model):
 class QuestionType(models.Model):
     title = models.CharField(max_length=64)
 
-    objects = models.Manager()
+    objects = CourseAPIManager()
 
     def __str__(self):
         return self.title
@@ -119,7 +148,7 @@ class PresetAnswer(models.Model):
     options = models.ManyToManyField('PresetChoosableOption', blank=True)
     mapped_answers = models.ManyToManyField('PresetMappedOption', blank=True)
 
-    objects = models.Manager()
+    objects = CourseAPIManager()
 
     @property
     def lesson(self):
@@ -142,7 +171,7 @@ class PresetChoosableOption(models.Model):
     title = models.CharField(max_length=128)
     correct_answer = models.BooleanField()
 
-    objects = models.Manager()
+    objects = CourseAPIManager()
 
     @property
     def lesson(self):
@@ -166,7 +195,7 @@ class PresetMappedOption(models.Model):
     group = models.ForeignKey('PresetMappedOptionGroup', on_delete=models.CASCADE,
                               related_name='preset_mapped_answers', default=None)
 
-    objects = models.Manager()
+    objects = CourseAPIManager()
 
     @property
     def lesson(self):
@@ -192,7 +221,7 @@ class PresetMappedOptionGroup(models.Model):
     question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='mapped_group_preset', default=None)
     title = models.CharField(max_length=64)
 
-    objects = models.Manager()
+    objects = CourseAPIManager()
 
     def __str__(self):
         return self.title
@@ -207,7 +236,7 @@ class CoursePersonalProgress(models.Model):
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='course_progress')
     completed = models.BooleanField(help_text='Лекция завершена?', verbose_name='Завершен', default=False)
 
-    objects = models.Manager()
+    objects = CourseAPIManager()
 
     @property
     def first_lesson(self):
@@ -218,16 +247,19 @@ class CoursePersonalProgress(models.Model):
         return self.course.last_lesson
 
     @property
+    def all_lessons_progress(self):
+        return LessonPersonalProgress.objects.filter(course_progress=self.id)
+
+    @property
     def current_lesson(self):
-        lessons_progress = LessonPersonalProgress.objects.filter(course_progress=self.id)
-        for lesson in lessons_progress:
-            if not lesson.completed:
-                return lesson
+        for lesson_progress in self.all_lessons_progress:
+            if not lesson_progress.completed:
+                return lesson_progress.lesson
         return None
 
     @property
     def next_lesson(self):
-        if self.last_lesson != self.current_lesson:
+        if self.last_lesson.id != self.current_lesson.id:
             next_lessons = self.course.all_lessons.filter(order__gt=self.current_lesson.order)
             next_lesson = next_lessons.order_by('order').first()
             return next_lesson
@@ -251,7 +283,7 @@ class LessonPersonalProgress(models.Model):
                                                 verbose_name='Теоретическая часть')
     test_part_completed = models.BooleanField(help_text='Тест пройден?', verbose_name='Тест', default=False)
 
-    objects = models.Manager()
+    objects = CourseAPIManager()
 
     @property
     def answers(self):
@@ -282,7 +314,7 @@ class LessonPersonalProgress(models.Model):
         return self.course_last_lesson == self.lesson
 
     def __str__(self):
-        return f"{self.course_progress.course.title}: {self.lesson.lesson_title} ({self.completed})"
+        return f"{self.course_progress.course.title}: {self.lesson.title} ({self.completed})"
 
     class Meta:
         verbose_name = '3.1 Лекция(Прогресс)'
@@ -302,7 +334,7 @@ class Answer(models.Model):
     multi_answers = models.ManyToManyField(PresetChoosableOption, blank=True, related_name='user_answers')
     mapped_answers = models.ManyToManyField('MappedAnswer', blank=True, related_name='user_answers')
 
-    objects = models.Manager()
+    objects = CourseAPIManager()
 
     @property
     def question_type(self):
@@ -329,7 +361,7 @@ class MappedAnswer(models.Model):
     group = models.ForeignKey(PresetMappedOptionGroup, on_delete=models.CASCADE, default=None,
                               related_name='user_mapped_answers')
 
-    objects = models.Manager()
+    objects = CourseAPIManager()
 
     @property
     def title(self):
@@ -341,4 +373,3 @@ class MappedAnswer(models.Model):
     class Meta:
         verbose_name = '4.1 Ответ с сопоставлением'
         verbose_name_plural = '4.1 Ответы с сопоставлением'
-
