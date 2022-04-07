@@ -3,13 +3,6 @@ from django.contrib.auth.models import User
 from . import models
 
 
-class AnswerSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = models.Answer
-        fields = '__all__'
-
-
 class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -25,25 +18,11 @@ class UserSerializer(serializers.ModelSerializer):
         return user
 
 
-class ChoosableOptionSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        models = models.PresetChoosableOption
-        fields = '__all__'
-
-
 class SubChoosableOptionSerializer(serializers.ModelSerializer):
 
     class Meta:
         models = models.PresetChoosableOption
         fields = ['title']
-
-
-class QuestionSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = models.Question
-        fields = '__all__'
 
 
 class SubQuestionSerializer(serializers.ModelSerializer):
@@ -53,13 +32,6 @@ class SubQuestionSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Question
         fields = ['id', 'title', 'order']
-
-
-class LessonSerializer(serializers.Serializer):
-
-    class Meta:
-        model = models.Lesson
-        fields = ['title', 'course', 'order', 'content']
 
 
 class SubLessonSerializer(serializers.Serializer):

@@ -61,7 +61,7 @@ def create_first_lesson_then_course_start(sender, instance, created, **kwargs):
 class CreateUser(CreateAPIView):
     """
     POST method
-    In POST body take username field and password, and after register your Token
+    In POST body take username field and password, and after registering your Token
     """
     permission_classes = (
         AllowAny,)
@@ -123,8 +123,10 @@ class CommonCourseAPIGenericSet(GenericViewSet):
 
 class CourseGenericSet(CommonCourseAPIGenericSet):
     """
-    GET method (get_course_scheme) - in params need field "id" with course id
+    GET method - in params need field "id" with course id/
+        Give you course scheme with lesson and questions without answers
     POST method (start_course) - in params need field "id" with course id
+        Open for you that course if you don't do it before. Now you can take a lesson and test
     """
     queryset = models.Course.objects.all()
     serializer_class = CourseSerializer
@@ -178,8 +180,10 @@ class LessonGenericMIX(GenericViewSet):
 
 class LessonGenericViewSet(CommonCourseAPIGenericSet, LessonGenericMIX):
     """
-    GET method (get_lesson) - in params need field "id" with lesson id
-    POST method (complete_lesson) - in params need field "id" with lesson id
+    GET method - in params need field "id" with lesson id
+        give you a text part of lesson
+    POST method - in params need field "id" with lesson id
+        complete a text part of lesson and give you access to test
     """
 
     def get_lesson(self, request):
@@ -204,9 +208,15 @@ class LessonGenericViewSet(CommonCourseAPIGenericSet, LessonGenericMIX):
 class TestGenericViewSet(CommonCourseAPIGenericSet, LessonGenericMIX):
     """
     GET method - takes lesson's id in params
-    POST method - takes lesson's id in params and field answers in POST body
+        give you a test. Questions + options if it has.
+    POST method to save-test/ - takes lesson's id in params and field answers in POST body
+        save a test temporary stage
+    POST method to test/ - takes lesson's id in params and field answers in POST body
+        try complete test part if correct, if it's complete lesson block
+        and create next or complete course if it is the last lesson
+    JSON structure -
+{
     "answers":
-    Answer JSON structure
     {
         answers : [
             {
@@ -236,6 +246,7 @@ class TestGenericViewSet(CommonCourseAPIGenericSet, LessonGenericMIX):
             }
         ]
     }
+}
     """
 
     @property
